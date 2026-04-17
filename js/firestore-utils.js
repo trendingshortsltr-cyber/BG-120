@@ -116,9 +116,10 @@ export async function storeSubmission(uid, problemId, status, language = 'JavaSc
 }
 
 /**
- * Fetch leaderboard (all users sorted by problems solved)
+ * Fetch leaderboard (all users sorted by problems solved, then submissions)
+ * Expects users collection with schema: uid, name, email, problemsSolved, totalSubmissions
  */
-export async function getLeaderboard(limit = 50) {
+export async function getLeaderboard(limit = 50, currentUserUid = null) {
   if (!db) throw new Error('Firestore not initialized');
   try {
     const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js');
@@ -128,23 +129,26 @@ export async function getLeaderboard(limit = 50) {
     
     const leaderboardData = [];
     
-    for (const userDoc of snapshot.docs) {
+    snapshot.forEach(userDoc => {
       const user = userDoc.data();
-      const stats = await getUserStats(userDoc.id);
       
       leaderboardData.push({
         uid: userDoc.id,
-        username: user.username || 'User',
-        email: user.email,
-        solved: stats.solved,
-        submissions: stats.totalSubmissions,
-        accepted: stats.accepted,
-        accuracy: stats.accuracy
+        name: user.name || user.username || 'User',
+        email: user.email || '',
+        problemsSolved: user.problemsSolved || 0,
+        totalSubmissions: user.totalSubmissions || 0,
+        isCurrentUser: userDoc.id === currentUserUid
       });
-    }
+    });
     
-    // Sort by problems solved (descending)
-    leaderboardData.sort((a, b) => b.solved - a.solved);
+    // Sort by problemsSolved (descending), then by totalSubmissions (descending)
+    leaderboardData.sort((a, b) => {
+      if (b.problemsSolved !== a.problemsSolved) {
+        return b.problemsSolved - a.problemsSolved;
+      }
+      return b.totalSubmissions - a.totalSubmissions;
+    });
     
     // Add ranking
     leaderboardData.forEach((user, index) => {

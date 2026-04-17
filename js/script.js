@@ -228,33 +228,67 @@ async function loadDashboardData() {
 async function loadLeaderboardData() {
   if (!window.location.pathname.endsWith('leaderboard.html')) return;
 
+  // Protect leaderboard - only authenticated users can access
+  if (!currentUser) {
+    setTimeout(() => {
+      window.location.href = 'login.html';
+    }, 500);
+    return;
+  }
+
+  const tbody = document.getElementById('leaderboard-tbody');
+  
+  // Show loading state
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:3rem;color:var(--text-muted)">Loading leaderboard...</td></tr>';
+  }
+
   try {
-    const leaderboard = await getLeaderboard(100);
-    const tbody = document.getElementById('leaderboard-tbody');
+    // Fetch leaderboard data with current user ID
+    const leaderboard = await getLeaderboard(100, currentUser.uid);
     
     if (tbody) {
-      tbody.innerHTML = leaderboard.length > 0
-        ? leaderboard.map(user => `
-            <tr>
+      if (leaderboard.length > 0) {
+        tbody.innerHTML = leaderboard.map(user => {
+          // Highlight current user's row
+          const rowStyle = user.isCurrentUser 
+            ? 'background:rgba(88,166,255,0.08);border-left:3px solid var(--accent)' 
+            : '';
+          
+          const nameInitials = (user.name || 'User')
+            .split(' ')
+            .map(n => n[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
+          
+          return `
+            <tr style="${rowStyle};${user.isCurrentUser ? 'font-weight:500' : ''}">
               <td style="text-align:center;font-weight:700">${user.rank}</td>
               <td>
                 <div style="display:flex;align-items:center;gap:0.5rem">
                   <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:white">
-                    ${user.username.slice(0, 2).toUpperCase()}
+                    ${nameInitials}
                   </div>
-                  <a href="profile.html" style="color:var(--accent);font-weight:500">${user.username}</a>
+                  <span style="color:${user.isCurrentUser ? 'var(--accent)' : 'inherit'};font-weight:${user.isCurrentUser ? '600' : '500'}">${user.name}${user.isCurrentUser ? ' (You)' : ''}</span>
                 </div>
               </td>
-              <td style="text-align:center">${user.solved}</td>
-              <td style="text-align:center">${user.submissions}</td>
-              <td style="text-align:center">${user.accuracy}%</td>
+              <td style="text-align:center">${user.problemsSolved}</td>
+              <td style="text-align:center">${user.totalSubmissions}</td>
+              <td style="text-align:center;color:var(--text-muted);font-size:0.875rem">${user.email}</td>
             </tr>
-          `).join('')
-        : '<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--text-muted)">Leaderboard empty</td></tr>';
+          `;
+        }).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:3rem;color:var(--text-muted)">No users yet</td></tr>';
+      }
     }
 
   } catch (error) {
     console.error('Error loading leaderboard:', error);
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:3rem;color:var(--text-muted)">Error loading leaderboard</td></tr>';
+    }
   }
 }
 
