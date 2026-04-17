@@ -44,7 +44,8 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, orderBy, limit as limitFn, getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import { getUserProfile, getUserStats, getRecentSubmissions, getLeaderboard, setFirestore } from './firestore-utils.js';
 
 let auth = null;
 let db = null;
@@ -66,6 +67,7 @@ async function initializeFirebase() {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
+  setFirestore(db);  // Pass db to firestore-utils
 }
 
 function showAuthMessage(elementId, message, success = false) {
@@ -157,6 +159,141 @@ function setActiveNav() {
   });
 }
 
+// ===== DASHBOARD FUNCTIONS =====
+
+async function loadDashboardData() {
+  if (!currentUser || !window.location.pathname.endsWith('dashboard.html')) return;
+
+  try {
+    // Fetch user profile
+    const userProfile = await getUserProfile(currentUser.uid);
+    
+    // Fetch user stats
+    const stats = await getUserStats(currentUser.uid);
+    
+    // Update dashboard with user data
+    const pageSubtitle = document.querySelector('.page-subtitle');
+    if (pageSubtitle) {
+      const username = userProfile?.username || currentUser.email.split('@')[0];
+      pageSubtitle.innerHTML = `Welcome back, <a href="profile.html" style="color:var(--accent)">${username}</a>`;
+    }
+
+    // Update profile card
+    const profileAvatar = document.querySelector('.profile-avatar-lg');
+    const profileName = document.querySelector('.p-name');
+    const profileHandle = document.querySelector('.p-handle');
+    
+    if (profileAvatar && userProfile) {
+      const initials = (userProfile.username || 'U')
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2);
+      profileAvatar.textContent = initials;
+      
+      if (profileName) profileName.textContent = userProfile.username || 'User';
+      if (profileHandle) profileHandle.textContent = `${userProfile.email} · Rank #${stats.rank || '—'}`;
+    }
+
+    // Update stats cards
+    const statNumbers = document.querySelectorAll('.sc-num');
+    if (statNumbers.length >= 3) {
+      statNumbers[0].textContent = stats.solved || 0;
+      statNumbers[1].textContent = '7'; // Keep default
+      statNumbers[2].textContent = '1,847'; // Keep default
+    }
+
+    // Update recent submissions
+    const recentSubmissions = await getRecentSubmissions(currentUser.uid, 5);
+    const tbody = document.getElementById('recent-submissions-tbody');
+    if (tbody) {
+      tbody.innerHTML = recentSubmissions.length > 0
+        ? recentSubmissions.map(sub => `
+            <tr>
+              <td><a href="problem.html?id=${sub.problemId}" style="color:var(--accent);font-size:0.875rem;font-weight:500">Problem ${sub.problemId}</a></td>
+              <td>${getSubmissionBadge(sub.status)}</td>
+              <td>${sub.language}</td>
+              <td>${formatDate(sub.timestamp?.toDate?.() || new Date())}</td>
+            </tr>
+          `).join('')
+        : '<tr><td colspan="4" style="text-align:center;padding:1rem;color:var(--text-muted)">No submissions yet</td></tr>';
+    }
+
+  } catch (error) {
+    console.error('Error loading dashboard data:', error);
+  }
+}
+
+async function loadLeaderboardData() {
+  if (!window.location.pathname.endsWith('leaderboard.html')) return;
+
+  try {
+    const leaderboard = await getLeaderboard(100);
+    const tbody = document.getElementById('leaderboard-tbody');
+    
+    if (tbody) {
+      tbody.innerHTML = leaderboard.length > 0
+        ? leaderboard.map(user => `
+            <tr>
+              <td style="text-align:center;font-weight:700">${user.rank}</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:0.5rem">
+                  <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:white">
+                    ${user.username.slice(0, 2).toUpperCase()}
+                  </div>
+                  <a href="profile.html" style="color:var(--accent);font-weight:500">${user.username}</a>
+                </div>
+              </td>
+              <td style="text-align:center">${user.solved}</td>
+              <td style="text-align:center">${user.submissions}</td>
+              <td style="text-align:center">${user.accuracy}%</td>
+            </tr>
+          `).join('')
+        : '<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--text-muted)">Leaderboard empty</td></tr>';
+    }
+
+  } catch (error) {
+    console.error('Error loading leaderboard:', error);
+  }
+}
+
+// ===== NAVIGATION HANDLERS =====
+
+function setupNavigationButtons() {
+  // Start Practicing button
+  document.querySelectorAll('a[href="problems.html"], button[onclick*="problems.html"]').forEach(el => {
+    if (el.tagName === 'A') el.onclick = () => {
+      window.location.href = 'problems.html';
+      return false;
+    };
+  });
+
+  // Contests button
+  document.querySelectorAll('a[href="contests.html"], button[onclick*="contests.html"]').forEach(el => {
+    if (el.tagName === 'A') el.onclick = () => {
+      window.location.href = 'contests.html';
+      return false;
+    };
+  });
+
+  // Leaderboard button
+  document.querySelectorAll('a[href="leaderboard.html"], button[onclick*="leaderboard.html"]').forEach(el => {
+    if (el.tagName === 'A') el.onclick = () => {
+      window.location.href = 'leaderboard.html';
+      return false;
+    };
+  });
+
+  // Dashboard button
+  document.querySelectorAll('a[href="dashboard.html"], button[onclick*="dashboard.html"]').forEach(el => {
+    if (el.tagName === 'A') el.onclick = () => {
+      window.location.href = 'dashboard.html';
+      return false;
+    };
+  });
+}
+
 function renderNavbar(container) {
   const user = currentUser;
   container.innerHTML = `
@@ -199,7 +336,7 @@ function renderNavbar(container) {
 async function setupAuth() {
   await initializeFirebase();
 
-  onAuthStateChanged(auth, user => {
+  onAuthStateChanged(auth, async user => {
     currentUser = user;
     const navContainer = document.getElementById('navbar');
     if (navContainer) {
@@ -208,10 +345,18 @@ async function setupAuth() {
 
     if (window.location.pathname.endsWith('dashboard.html') && !user) {
       window.location.href = 'login.html';
+      return;
+    }
+
+    // Load dashboard data if user is on dashboard
+    if (user) {
+      await loadDashboardData();
+      await loadLeaderboardData();
     }
   });
 
   attachAuthHandlers();
+  setupNavigationButtons();
 }
 
 function attachAuthHandlers() {
@@ -236,12 +381,21 @@ function attachAuthHandlers() {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  setupAuth().catch(err => {
+window.addEventListener('DOMContentLoaded', async () => {
+  setupNavigationButtons();
+  
+  try {
+    await setupAuth();
+    // Load dashboard/leaderboard data if needed
+    if (currentUser) {
+      await loadDashboardData();
+      await loadLeaderboardData();
+    }
+  } catch (err) {
     console.error(err);
     showAuthMessage('login-msg', err.message);
     showAuthMessage('signup-msg', err.message);
-  });
+  }
 });
 
 // ===== DUMMY DATA =====
