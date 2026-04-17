@@ -46,20 +46,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBIP9ClSyLqakhVEG_RlACMPQQ6r6dG0Lk",
-  authDomain: "team-error1.firebaseapp.com",
-  projectId: "team-error1",
-  storageBucket: "team-error1.firebasestorage.app",
-  messagingSenderId: "1043433787408",
-  appId: "1:1043433787408:web:102358db1e51eb21df7a95"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+let auth = null;
+let db = null;
 const googleProvider = new GoogleAuthProvider();
 let currentUser = null;
+
+async function loadFirebaseConfig() {
+  try {
+    const module = await import('../firebase-config.js');
+    return module.firebaseConfig;
+  } catch (error) {
+    console.error('Firebase config load error:', error);
+    throw new Error('Missing firebase-config.js. Copy firebase-config.example.js and add your Firebase config there.');
+  }
+}
+
+async function initializeFirebase() {
+  const firebaseConfig = await loadFirebaseConfig();
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+}
 
 function showAuthMessage(elementId, message, success = false) {
   const msg = document.getElementById(elementId);
@@ -189,17 +196,23 @@ function renderNavbar(container) {
   setActiveNav();
 }
 
-onAuthStateChanged(auth, user => {
-  currentUser = user;
-  const navContainer = document.getElementById('navbar');
-  if (navContainer) {
-    renderNavbar(navContainer);
-  }
+async function setupAuth() {
+  await initializeFirebase();
 
-  if (window.location.pathname.endsWith('dashboard.html') && !user) {
-    window.location.href = 'login.html';
-  }
-});
+  onAuthStateChanged(auth, user => {
+    currentUser = user;
+    const navContainer = document.getElementById('navbar');
+    if (navContainer) {
+      renderNavbar(navContainer);
+    }
+
+    if (window.location.pathname.endsWith('dashboard.html') && !user) {
+      window.location.href = 'login.html';
+    }
+  });
+
+  attachAuthHandlers();
+}
 
 function attachAuthHandlers() {
   const loginForm = document.getElementById('login-form');
@@ -224,7 +237,11 @@ function attachAuthHandlers() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  attachAuthHandlers();
+  setupAuth().catch(err => {
+    console.error(err);
+    showAuthMessage('login-msg', err.message);
+    showAuthMessage('signup-msg', err.message);
+  });
 });
 
 // ===== DUMMY DATA =====
