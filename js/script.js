@@ -43,7 +43,7 @@
  */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, createUserWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, query, where, orderBy, limit as limitFn, getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 import { getUserProfile, getUserStats, getRecentSubmissions, getLeaderboard, setFirestore } from './firestore-utils.js';
 
@@ -353,6 +353,26 @@ function setupNavigationButtons() {
         }
       }
     });
+  });
+}
+
+/**
+ * Setup profile page buttons (Edit Profile, Follow)
+ */
+function setupProfileButtons() {
+  // Find buttons by text content since they don't have IDs
+  const buttons = document.querySelectorAll('.profile-info-card button');
+  buttons.forEach(btn => {
+    if (btn.textContent.includes('Edit Profile')) {
+      btn.addEventListener('click', editProfile);
+    } else if (btn.textContent.includes('Follow')) {
+      btn.addEventListener('click', (e) => {
+        // Get the username from profile page title
+        const usernameEl = document.querySelector('.profile-info-card h1');
+        const username = usernameEl ? usernameEl.textContent.trim() : 'unknown';
+        followUser(username);
+      });
+    }
   });
 }
 
@@ -1022,6 +1042,59 @@ function navigate(page) {
 }
 
 /**
+ * Edit user profile
+ */
+function editProfile() {
+  if (!currentUser) {
+    alert('Please log in first');
+    window.location.href = 'login.html';
+    return;
+  }
+  // Show profile edit options
+  const newName = prompt('Enter your name:', currentUser.displayName || currentUser.email);
+  if (newName && newName.trim()) {
+    const auth = getAuth();
+    if (auth.currentUser) {
+      updateProfile(auth.currentUser, { displayName: newName.trim() })
+        .then(() => {
+          alert('Profile updated successfully');
+          location.reload();
+        })
+        .catch(err => alert('Error updating profile: ' + err.message));
+    }
+  }
+}
+
+/**
+ * Follow/unfollow a user
+ */
+function followUser(userId) {
+  if (!currentUser) {
+    alert('Please log in first');
+    window.location.href = 'login.html';
+    return;
+  }
+
+  // Get current user's follows from localStorage
+  const follows = JSON.parse(localStorage.getItem('userFollows') || '[]');
+  const followBtn = event.target;
+  
+  if (follows.includes(userId)) {
+    // Unfollow
+    follows.splice(follows.indexOf(userId), 1);
+    followBtn.textContent = 'Follow';
+    followBtn.classList.remove('followed');
+  } else {
+    // Follow
+    follows.push(userId);
+    followBtn.textContent = 'Following';
+    followBtn.classList.add('followed');
+  }
+  
+  localStorage.setItem('userFollows', JSON.stringify(follows));
+}
+
+/**
  * Handle tab switching
  */
 function switchTab(tabName) {
@@ -1094,6 +1167,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (page === 'submissions.html') initSubmissionsPage();
   if (page === 'contests.html') initContestsPage();
   if (page === 'dashboard.html') initDashboard();
+  if (page === 'profile.html') setupProfileButtons();
   if (page === 'login.html') initLoginForm();
   if (page === 'signup.html') initSignupForm();
 
