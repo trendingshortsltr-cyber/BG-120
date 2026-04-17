@@ -42,8 +42,192 @@
  * ============================================================
  */
 
-// ===== DUMMY DATA =====
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
+const firebaseConfig = {
+  apiKey: "AIzaSyBIP9ClSyLqakhVEG_RlACMPQQ6r6dG0Lk",
+  authDomain: "team-error1.firebaseapp.com",
+  projectId: "team-error1",
+  storageBucket: "team-error1.firebasestorage.app",
+  messagingSenderId: "1043433787408",
+  appId: "1:1043433787408:web:102358db1e51eb21df7a95"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+let currentUser = null;
+
+function showAuthMessage(elementId, message, success = false) {
+  const msg = document.getElementById(elementId);
+  if (!msg) return;
+  msg.textContent = message;
+  msg.style.display = 'block';
+  msg.style.color = success ? '#0f5132' : '#842029';
+}
+
+function clearAuthMessage(elementId) {
+  const msg = document.getElementById(elementId);
+  if (!msg) return;
+  msg.textContent = '';
+  msg.style.display = 'none';
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  clearAuthMessage('login-msg');
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    showAuthMessage('login-msg', 'Login successful! Redirecting…', true);
+    window.location.href = 'dashboard.html';
+  } catch (error) {
+    showAuthMessage('login-msg', error.message || 'Unable to sign in. Please try again.');
+  }
+}
+
+async function handleSignupSubmit(event) {
+  event.preventDefault();
+  const username = document.getElementById('username').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const confirmPassword = document.getElementById('confirm-password').value;
+  clearAuthMessage('signup-msg');
+
+  if (password !== confirmPassword) {
+    return showAuthMessage('signup-msg', 'Passwords do not match. Please try again.');
+  }
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      username,
+      email,
+      createdAt: serverTimestamp()
+    });
+    showAuthMessage('signup-msg', 'Account created! Redirecting…', true);
+    window.location.href = 'dashboard.html';
+  } catch (error) {
+    showAuthMessage('signup-msg', error.message || 'Unable to create account. Please try again.');
+  }
+}
+
+async function handleGoogleSignIn() {
+  clearAuthMessage('login-msg');
+  clearAuthMessage('signup-msg');
+
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    await setDoc(doc(db, 'users', user.uid), {
+      username: user.displayName || user.email.split('@')[0],
+      email: user.email,
+      provider: 'google',
+      lastLogin: serverTimestamp(),
+      createdAt: serverTimestamp()
+    }, { merge: true });
+    window.location.href = 'dashboard.html';
+  } catch (error) {
+    showAuthMessage('login-msg', error.message || 'Google sign-in failed.');
+    showAuthMessage('signup-msg', error.message || 'Google sign-in failed.');
+  }
+}
+
+function setActiveNav() {
+  const page = window.location.pathname.split('/').pop() || 'index.html';
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href === page || (page === '' && href === 'index.html')) {
+      a.classList.add('active');
+    } else {
+      a.classList.remove('active');
+    }
+  });
+}
+
+function renderNavbar(container) {
+  const user = currentUser;
+  container.innerHTML = `
+    <nav class="navbar">
+      <a href="index.html" class="nav-brand">
+        <div class="nav-logo">${LOGO_SVG}</div>
+        CodeArena
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="problems.html">Problems</a>
+        <a href="contests.html">Contests</a>
+        <a href="leaderboard.html">Leaderboard</a>
+        <a href="dashboard.html">Dashboard</a>
+      </div>
+      <div class="nav-actions">
+        ${user ? `
+          <span class="nav-user">${user.email}</span>
+          <button id="logout-btn" class="btn btn-ghost btn-sm">Logout</button>
+        ` : `
+          <a href="login.html" class="btn btn-ghost btn-sm">Log in</a>
+          <a href="signup.html" class="btn btn-primary btn-sm">Sign up</a>
+        `}
+      </div>
+    </nav>`;
+
+  if (user) {
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        await signOut(auth);
+        window.location.href = 'index.html';
+      });
+    }
+  }
+
+  setActiveNav();
+}
+
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  const navContainer = document.getElementById('navbar');
+  if (navContainer) {
+    renderNavbar(navContainer);
+  }
+
+  if (window.location.pathname.endsWith('dashboard.html') && !user) {
+    window.location.href = 'login.html';
+  }
+});
+
+function attachAuthHandlers() {
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', handleLoginSubmit);
+  }
+
+  const signupForm = document.getElementById('signup-form');
+  if (signupForm) {
+    signupForm.addEventListener('submit', handleSignupSubmit);
+  }
+
+  const googleLoginBtn = document.getElementById('google-login-btn');
+  if (googleLoginBtn) {
+    googleLoginBtn.addEventListener('click', handleGoogleSignIn);
+  }
+
+  const googleSignupBtn = document.getElementById('google-signup-btn');
+  if (googleSignupBtn) {
+    googleSignupBtn.addEventListener('click', handleGoogleSignIn);
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  attachAuthHandlers();
+});
+
+// ===== DUMMY DATA =====
 const DUMMY_USERS = [
   { rank: 1, username: "tourneysolver", name: "Alex Chen", solved: 847, points: 12450, rating: 2891, avatar: "AC", color: "#58a6ff" },
   { rank: 2, username: "codemaster99", name: "Priya Sharma", solved: 812, points: 11980, rating: 2754, avatar: "PS", color: "#bc8cff" },
@@ -160,40 +344,8 @@ function getCountdown(isoDate) {
   return `${h}h ${m}m`;
 }
 
-function setActiveNav() {
-  const page = window.location.pathname.split('/').pop() || 'index.html';
-  document.querySelectorAll('.nav-links a').forEach(a => {
-    const href = a.getAttribute('href');
-    if (href === page || (page === '' && href === 'index.html')) {
-      a.classList.add('active');
-    }
-  });
-}
-
 // ===== NAVBAR HTML =====
 const LOGO_SVG = `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M9 1L3 9h5l-1 6 6-8H8l1-6z"/></svg>`;
-
-function renderNavbar(container) {
-  container.innerHTML = `
-    <nav class="navbar">
-      <a href="index.html" class="nav-brand">
-        <div class="nav-logo">${LOGO_SVG}</div>
-        CodeArena
-      </a>
-      <div class="nav-links">
-        <a href="index.html">Home</a>
-        <a href="problems.html">Problems</a>
-        <a href="contests.html">Contests</a>
-        <a href="leaderboard.html">Leaderboard</a>
-        <a href="dashboard.html">Dashboard</a>
-      </div>
-      <div class="nav-actions">
-        <a href="login.html" class="btn btn-ghost btn-sm">Log in</a>
-        <a href="signup.html" class="btn btn-primary btn-sm">Sign up</a>
-      </div>
-    </nav>`;
-  setActiveNav();
-}
 
 // ===== FOOTER HTML =====
 function renderFooter(container) {
