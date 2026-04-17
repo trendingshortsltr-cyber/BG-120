@@ -295,36 +295,64 @@ async function loadLeaderboardData() {
 // ===== NAVIGATION HANDLERS =====
 
 function setupNavigationButtons() {
-  // Start Practicing button
-  document.querySelectorAll('a[href="problems.html"], button[onclick*="problems.html"]').forEach(el => {
-    if (el.tagName === 'A') el.onclick = () => {
-      window.location.href = 'problems.html';
-      return false;
-    };
+  // Ensure all navigation links work properly
+  // These should work natively with href, but we ensure they do
+  document.querySelectorAll('a[href]').forEach(link => {
+    link.style.cursor = 'pointer';
   });
 
-  // Contests button
-  document.querySelectorAll('a[href="contests.html"], button[onclick*="contests.html"]').forEach(el => {
-    if (el.tagName === 'A') el.onclick = () => {
-      window.location.href = 'contests.html';
-      return false;
-    };
+  // Make sure all major navigation buttons are clickable
+  const navButtons = {
+    'problems.html': () => window.location.href = 'problems.html',
+    'contests.html': () => window.location.href = 'contests.html',
+    'leaderboard.html': () => window.location.href = 'leaderboard.html',
+    'dashboard.html': () => window.location.href = 'dashboard.html',
+    'index.html': () => window.location.href = 'index.html',
+    'login.html': () => window.location.href = 'login.html',
+    'signup.html': () => window.location.href = 'signup.html',
+    'submissions.html': () => window.location.href = 'submissions.html',
+    'profile.html': () => window.location.href = 'profile.html'
+  };
+
+  // Setup event delegation for any button that might need navigation
+  document.addEventListener('click', (e) => {
+    const href = e.target.getAttribute('href');
+    if (href && navButtons[href] && e.target.tagName !== 'A') {
+      e.preventDefault();
+      navButtons[href]();
+    }
   });
 
-  // Leaderboard button
-  document.querySelectorAll('a[href="leaderboard.html"], button[onclick*="leaderboard.html"]').forEach(el => {
-    if (el.tagName === 'A') el.onclick = () => {
-      window.location.href = 'leaderboard.html';
-      return false;
-    };
+  // Ensure tab buttons work
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const tabName = btn.dataset.tab;
+      if (tabName) switchTab(tabName);
+    });
   });
 
-  // Dashboard button
-  document.querySelectorAll('a[href="dashboard.html"], button[onclick*="dashboard.html"]').forEach(el => {
-    if (el.tagName === 'A') el.onclick = () => {
-      window.location.href = 'dashboard.html';
-      return false;
-    };
+  // Ensure filter buttons work in leaderboard
+  const filterBtns = document.querySelectorAll('[data-filter]');
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const filter = btn.dataset.filter;
+      filterLeaderboard(filter);
+    });
+  });
+
+  // Pagination buttons already have onclick handlers, but ensure they work
+  const pageButtons = document.querySelectorAll('.page-btn');
+  pageButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (!btn.getAttribute('onclick')) {
+        const pageNum = parseInt(btn.textContent);
+        if (!isNaN(pageNum)) {
+          changePage(pageNum);
+        }
+      }
+    });
   });
 }
 
@@ -390,7 +418,6 @@ async function setupAuth() {
   });
 
   attachAuthHandlers();
-  setupNavigationButtons();
 }
 
 function attachAuthHandlers() {
@@ -415,24 +442,7 @@ function attachAuthHandlers() {
   }
 }
 
-window.addEventListener('DOMContentLoaded', async () => {
-  setupNavigationButtons();
-  
-  try {
-    await setupAuth();
-    // Load dashboard/leaderboard data if needed
-    if (currentUser) {
-      await loadDashboardData();
-      await loadLeaderboardData();
-    }
-  } catch (err) {
-    console.error(err);
-    showAuthMessage('login-msg', err.message);
-    showAuthMessage('signup-msg', err.message);
-  }
-});
-
-// ===== DUMMY DATA =====
+// ===== MISSING DATA =====
 const DUMMY_USERS = [
   { rank: 1, username: "tourneysolver", name: "Alex Chen", solved: 847, points: 12450, rating: 2891, avatar: "AC", color: "#58a6ff" },
   { rank: 2, username: "codemaster99", name: "Priya Sharma", solved: 812, points: 11980, rating: 2754, avatar: "PS", color: "#bc8cff" },
@@ -965,20 +975,131 @@ function showFormMessage(id, msg, type) {
   el.style.display = 'block';
 }
 
+// ===== MISSING BUTTON HANDLERS =====
+
+/**
+ * Change page for pagination
+ */
+function changePage(pageNum) {
+  window.scrollTo(0, 0);
+  const table = document.querySelector('.submissions-table, .leaderboard-table');
+  if (table) {
+    table.style.opacity = '0.5';
+    setTimeout(() => {
+      const buttons = document.querySelectorAll('.page-btn');
+      buttons.forEach((btn, i) => {
+        if (parseInt(btn.textContent) === pageNum) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      table.style.opacity = '1';
+    }, 200);
+  }
+}
+
+/**
+ * Register for contest
+ */
+function registerContest(contestId) {
+  alert(`You have registered for contest ${contestId}!`);
+  console.log('Registered for contest:', contestId);
+}
+
+/**
+ * Enter ongoing contest
+ */
+function enterContest(contestId) {
+  window.location.href = `contests.html?id=${contestId}`;
+}
+
+/**
+ * Navigate to specific page
+ */
+function navigate(page) {
+  window.location.href = page;
+}
+
+/**
+ * Handle tab switching
+ */
+function switchTab(tabName) {
+  // Hide all tab contents
+  const contents = document.querySelectorAll('[class*="-content"]');
+  contents.forEach(el => el.style.display = 'none');
+  
+  // Show selected tab content
+  const tabContent = document.getElementById(`${tabName}-content`);
+  if (tabContent) {
+    tabContent.style.display = 'block';
+  }
+  
+  // Update tab buttons
+  const tabs = document.querySelectorAll('.tab-btn');
+  tabs.forEach(btn => {
+    if (btn.dataset.tab === tabName) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+}
+
+/**
+ * Filter leaderboard
+ */
+function filterLeaderboard(filter) {
+  console.log('Filter leaderboard by:', filter);
+  // TODO: Implement actual filtering logic
+  alert(`Filter by: ${filter}`);
+}
+
+/**
+ * Filter problems
+ */
+function filterProblems(difficulty) {
+  console.log('Filter problems by difficulty:', difficulty);
+  const filters = document.querySelectorAll('[data-difficulty]');
+  filters.forEach(el => {
+    if (el.dataset.difficulty === difficulty) {
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  });
+}
+
 // ===== INIT =====
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // Setup auth and navigation first
+  setupNavigationButtons();
+  try {
+    await setupAuth();
+  } catch (err) {
+    console.error('Auth setup error:', err);
+  }
+
+  // Initialize page elements
   const navEl = document.getElementById('navbar');
   const footerEl = document.getElementById('footer');
   if (navEl) renderNavbar(navEl);
   if (footerEl) renderFooter(footerEl);
 
+  // Page-specific initialization
   const page = window.location.pathname.split('/').pop();
   if (page === 'problems.html') initProblemsPage();
   if (page === 'problem.html') { initProblemPage(); initTabs(); initLanguageSelector(); initCodeActions(); initAIHint(); }
-  if (page === 'leaderboard.html') initLeaderboard();
+  if (page === 'leaderboard.html') { initLeaderboard(); }
   if (page === 'submissions.html') initSubmissionsPage();
   if (page === 'contests.html') initContestsPage();
   if (page === 'dashboard.html') initDashboard();
   if (page === 'login.html') initLoginForm();
   if (page === 'signup.html') initSignupForm();
+
+  // Load data for protected pages
+  if (currentUser) {
+    if (page === 'dashboard.html') await loadDashboardData();
+    if (page === 'leaderboard.html') await loadLeaderboardData();
+  }
 });
